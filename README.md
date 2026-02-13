@@ -13,7 +13,7 @@
 
 ## 2. Architecture Diagram
 Berikut ini desain yang saya pilih untuk menangani 40k request per menit.
-![alt text](./docs/image-3.png)
+![alt text](./docs/image4.png)
 
 ###### Penjelasan:
 1. Redis Cache: Redis cache saya gunakan untuk mengurangi load pada database. Jadi query database akan disimpan sementara di Redis. Bertujuan untuk mengurangi load pada database dan mempercepat query.
