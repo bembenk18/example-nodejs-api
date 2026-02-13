@@ -15,6 +15,7 @@
 Berikut ini desain yang saya pilih untuk menangani 40k request per menit.
 ![alt text](./docs/image4.png)
 
+
 ###### Penjelasan:
 1. Redis Cache: Redis cache saya gunakan untuk mengurangi load pada database. Jadi query database akan disimpan sementara di Redis. Bertujuan untuk mengurangi load pada database dan mempercepat query.
 2. RDS Read Replicas: Karena traffic didominasi olet GET, beban baca saya pisahkann ke beberapa read replicas. Database master menangani beban write agar tidak terjadi bottleneck.
