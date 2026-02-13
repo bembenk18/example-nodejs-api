@@ -34,6 +34,6 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             docker pull ${{ secrets.DOCKERHUB_USERNAME }}/example-api:latest
-            docker stop api-service || true
-            docker rm api-service || true
+            docker rm -f $(docker ps -q --filter "publish=3000") || true
+            docker rm -f api-service || true
             docker run -d --name api-service -p 3000:3000 ${{ secrets.DOCKERHUB_USERNAME }}/example-api:latest
