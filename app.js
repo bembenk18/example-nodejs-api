@@ -5,7 +5,6 @@ const { Pool } = require('pg');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// PostgreSQL Connection Pool
 const pool = new Pool({
   user: process.env.DB_USER,
   host: process.env.DB_HOST,
@@ -44,7 +43,7 @@ app.use((req, res, next) => {
 // Root path - checks database connection
 app.get('/', async (req, res) => {
   try {
-    
+
     await pool.query('SELECT NOW()');
     res.status(200).json({ message: 'Database connection successful', status: 'OK' });
   } catch (err) {
