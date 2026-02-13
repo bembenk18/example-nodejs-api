@@ -14,6 +14,7 @@
 ## 2. Architecture Diagram
 Berikut ini desain yang saya pilih untuk menangani 40k request per menit.
 ![alt text](./docs/image4.png)
+![alt text](image.png)
 
 
 ###### Penjelasan:
