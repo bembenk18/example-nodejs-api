@@ -36,4 +36,4 @@ jobs:
             docker pull ${{ secrets.DOCKERHUB_USERNAME }}/example-api:latest
             docker rm -f $(docker ps -q --filter "publish=3000") || true
             docker rm -f api-service || true
-            docker run -d --name api-service --network example-nodejs-api_default --env-file ~/example-nodejs-api/.env -p 3000:3000 ${{ secrets.DOCKERHUB_USERNAME }}/example-api:latest
+            docker run -d --name api-service --network example-nodejs-api_default -p 3000:3000 -e NODE_ENV=production -e PORT=3000 -e DB_HOST=example-nodejs-api-db-1 -e DB_PORT=5432 -e DB_USER=abc -e DB_PASSWORD=secret -e DB_NAME=mydatabase ${{ secrets.DOCKERHUB_USERNAME }}/example-api:latest
