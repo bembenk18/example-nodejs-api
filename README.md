@@ -1,134 +1,69 @@
-# Node.js API with PostgreSQL and Custom Logging
 
-This is a simple Node.js application that serves a RESTful API with PostgreSQL integration and custom request logging.
+# Qiscus Technical Test of SRE
 
-## Features
+# Task 1: Deployment
 
-*   **`/` (GET)**: Checks the database connection status.
-*   **`/api/cities` (GET)**: Fetches data from a PostgreSQL table named `citiess`.
-*   **Custom Logging**: Logs request duration/latency, path, client IP, HTTP method, status code, and HTTP host header for all incoming requests.
-*   **.env for Configuration**: Uses environment variables for sensitive configurations like database credentials and port.
+### 1. List Tools
+1. Docker & Docker Compose
+2. Github actions
+3. Grafana cloud 
+4. Nginx
+5. PostgreSQL
+6. Docker Hub
 
-## Prerequisites
+## 2. Architecture Diagram
+Berikut ini desain yang saya pilih untuk menangani 40k request per menit.
+![alt text](./docs/image-3.png)
 
-Before you begin, ensure you have the following installed:
-
-*   **Node.js 18+**: [Download & Install Node.js](https://nodejs.org/en/download/)
-*   **npm** (comes with Node.js)
-*   **PostgreSQL 16+**
-
-## Getting Started
-
-Follow these steps to get the project up and running on your local machine.
-
-### 1. Clone the repository
-
-```bash
-git clone <repository_url> # Replace with your repository URL
-cd citiesple-nodejs-api
-```
-
-### 2. Install Dependencies
-
-```bash
-npm install
-```
-
-This command will install all the necessary packages listed in `package.json` (Express, pg, dotenv).
-
-### 3. Environment Variables Configuration
-
-Create a `.env` file in the root of your project directory (`/home/sya/Documents/Qiscus/citiesple-nodejs-api/.env`). This file will store your database connection details and application port. Replace the placeholder values with your actual PostgreSQL credentials and desired port.
-
-```env
-PORT=3000
-DB_USER=your_username
-DB_HOST=your_host
-DB_NAME=your_database_name
-DB_PASSWORD=your_password
-DB_PORT=5432
-```
-
-### 4. Database Setup
-
-This application will get data from a table named `cities` in your PostgreSQL database. If you don't have one, you can create a simple one for testing purposes. Please see the citiesple in the [init_db.sql](./init_db.sql) file.
+###### Penjelasan:
+1. Redis Cache: Redis cache saya gunakan untuk mengurangi load pada database. Jadi query database akan disimpan sementara di Redis. Bertujuan untuk mengurangi load pada database dan mempercepat query.
+2. RDS Read Replicas: Karena traffic didominasi olet GET, beban baca saya pisahkann ke beberapa read replicas. Database master menangani beban write agar tidak terjadi bottleneck.
+3. Auto Scaling: Disini saya tambahkan auto scaling untuk menambahkan instance jika beban trafik meningkat dan mengurangi instance jika beban trafik menurun. Bertujuan untuk mengurangi biaya dan meningkatkan performa.
 
 
-### 5. Running the Application
 
-To start the application, use one of the following commands:
+# Task 2:Root Cause Analysis
 
-#### Development Mode (with Nodemon)
+Summary: Ditemukan beberapa kesalahan mulai dari konfigurasi sistem operasi, konfigurasi docker daemon, hingga logic aplikasi. 
 
-This mode uses `nodemon` to automatically restart the server whenever code changes are detected.
 
-```bash
-npm run dev
-```
+### A. Masalah yang ditemukan
+1. Manipulasi alias docker yang menyebabkan docker tidak dapat dijalankan.
+![alt text](./docs/image.png)
+2. Docker gagal berjalan karena parameter userns-remap-to yang tidak valid pada file /etc/docker/daemon.json
+3. File konfigurasi Docker dikunci dengan atribut immutable, mencegah perubahan meskipun menggunakan akses sudo.
+![alt text](./docs/image-1.png)
+4. Port 3000 sudah digunakan oleh nginx yang memblokir jalannya api.
+5. Database Connection Leak: Aplikasi Node.js tidak melakukan client.release() setelah melakukan query, menyebabkan pool koneksi habis dengan cepat.
+6. Improper Timeout Settings: Pengaturan connectionTimeoutMillis pada aplikasi terlalu rendah (100ms), menyebabkan error saat trafik tinggi.
 
-#### Using Docker in Development Mode
+### B. Metode Identifikasi
+1. Analisis log sistem menggunakan journalctl -u docker.service untuk mendiagnosa kegagalan daemon.
+2. Menggunakan lsattr untuk mendeteksi adanya atribut immutable pada file konfigurasi.
+3. Menggunakan lsof -i :3000 untuk menemukan proses Nginx yang membajak port aplikasi.
+4. Analisis docker logs secara real-time untuk mendeteksi error ECONNREFUSED, undefined_table, dan timeout exceeded.
+5. enggunakan autocannon untuk mereplikasi kegagalan di bawah beban trafik tinggi.
 
-```bash
-docker compose up -d --build
-```
+### C. Langkah Perbaikan
+1. Mengembalikan alias docker ke state semula.
+2. Menghapus parameter userns-remap-to yang tidak valid pada file /etc/docker/daemon.json.
+3. Menghapus atribut immutable dari file konfigurasi Docker.
+4. Menghentikan dan menonaktifkan service Nginx yang memblokir port 3000.
+5. **Patching Aplikasi:**  
+    a. Mengubah DB_HOST dari localhost ke db agar sesuai dengan network Docker.
+    b. Menambahkan client.release() pada blok finally di app.js.
+    c. Menaikkan connectionTimeoutMillis menjadi 2000ms untuk stabilitas.
+6. Menggunakan volume mounting pada /docker-entrypoint-initdb.d/ untuk memastikan skema SQL terimport otomatis saat container dijalankan.
+7. Menambahkan cron job untuk membersihkan build cache dan image yang tidak terpakai setiap jam.
 
-Once the server is running, you will see a message like:
 
-```
-Server running on port 3000
-```
+### D. Verifikasi
+Setelah perbaikan, dilakukan uji beban menggunakan autocannon dengan hasil sebagai berikut: 
+1. Total Requests: ~6000 requests dalam 5 detik.
+2. Status Codes: 100% Success (200 OK).
+3. Error Rate: 0% Non-2xx responses.
+![alt text](./docs/image-2.png)
 
-## API Endpoints
 
-*   **GET /**
-    *   **Description**: Checks if the application can successfully connect to the PostgreSQL database.
-    *   **Response**: 
-        ```json
-        {
-            "message": "Database connection successful",
-            "status": "OK"
-        }
-        ```
-        or in case of error:
-        ```json
-        {
-            "message": "Database connection failed",
-            "status": "Error",
-            "error": "<error_message>"
-        }
-        ```
 
-*   **GET /api/cities**
-    *   **Description**: Retrieves all entries from the `cities` table.
-    *   **Response**: An array of cities objects.
-        ```json
-        [
-            {
-                "id": 1,
-                "state": "California",
-                "country": "USA",
-                "city_name": "Los Angeles"
-            },
-            {
-                "id": 2,
-                "state": "New York",
-                "country": "USA",
-                "city_name": "New York City"
-            }
-        ]
-        ```
-        or in case of error:
-        ```json
-        {
-            "message": "Error fetching cities data",
-            "error": "<error_message>"
-        }
-        ```
 
-## Logging
-
-When you make a request to any endpoint, you will see a log entry in your console similar to this:
-
-```
-{"timestamp":"2026-01-29T04:28:39.952Z","method":"GET","url":"/favicon.ico","clientIp":"::ffff:172.19.0.1","host":"localhost:3000","status":404,"durationMs":0.378,"userAgent":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"}
-```
